@@ -47,12 +47,12 @@ public class AutoMode extends Activity {
 	RelativeLayout view;
 	int replacementColor = Color.GRAY;
 	AlertDialog.Builder builder;
-
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.automode);
+
 		initializer();
 
 	}
@@ -291,25 +291,24 @@ public class AutoMode extends Activity {
 	}
 
 	protected void ColorPicker() {
-		AmbilWarnaDialog dg = new AmbilWarnaDialog(this, Color.BLACK, true,
-				new OnAmbilWarnaListener() {
-					@Override
-					public void onOk(AmbilWarnaDialog dialog, int colors) {
-						replacementColor = colors;
+			AmbilWarnaDialog dg = new AmbilWarnaDialog(this, Color.BLACK,
+					true, new OnAmbilWarnaListener() {
+						@Override
+						public void onOk(AmbilWarnaDialog dialog, int colors) {
+							replacementColor = colors;
 
-					}
+						}
+						@Override
+						public void onCancel(AmbilWarnaDialog dialog) {
+							Toast.makeText( getBaseContext() ,
+									"You did not choose any Color",
+									Toast.LENGTH_SHORT).show();
 
-					@Override
-					public void onCancel(AmbilWarnaDialog dialog) {
-						Toast.makeText(getBaseContext(),
-								"You did not choose any of Color",
-								Toast.LENGTH_SHORT).show();
+						}
+					});
 
-					}
-				});
-
-		dg.show();
-	}
+			dg.show();
+		}	
 
 	@Override
 	public void onBackPressed() {
