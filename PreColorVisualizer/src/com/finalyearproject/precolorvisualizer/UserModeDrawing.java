@@ -1,7 +1,5 @@
 package com.finalyearproject.precolorvisualizer;
-
 import org.opencv.core.Point;
-
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
