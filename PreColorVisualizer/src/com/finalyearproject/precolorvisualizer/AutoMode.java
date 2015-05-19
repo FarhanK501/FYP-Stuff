@@ -18,6 +18,7 @@ import yuku.ambilwarna.AmbilWarnaDialog.OnAmbilWarnaListener;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -25,8 +26,10 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Bitmap.Config;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.provider.MediaStore.Images;
 import android.util.Log;
 import android.view.Menu;
@@ -35,11 +38,12 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnTouchListener;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
 @SuppressLint("NewApi")
-public class AutoMode extends Activity {
+public class AutoMode extends Activity{
 	
 	/**
 	 * Image View that will hold down our image with
@@ -91,8 +95,17 @@ public class AutoMode extends Activity {
 	 * showing progress when process is being executed so user can know
 	 * and wait unitl process is done
 	 */
-	boolean showProgess = false;
+	boolean showProgress = false;
 
+	/**
+	 * Progress Bar that will be shown when app is busy
+	 */
+	ProgressDialog currentProgress;
+	
+	/**
+	 * Handlder for thread and
+	 */
+	Handler handler;
 	
 	
 	/**
@@ -132,7 +145,6 @@ public class AutoMode extends Activity {
 		
 		// clearing edges that was drawn before
 		case R.id.segClearFrontView:
-			Toast.makeText(getBaseContext(), "Edges Cleared!", Toast.LENGTH_SHORT).show();
 			clearEdge();
 			break;
 		
@@ -225,25 +237,7 @@ public class AutoMode extends Activity {
 	 * @param bmp
 	 */	
 	private void clearEdge(){
-
-		frontView.setDrawingCacheEnabled(true);
-		white = frontView.getDrawingCache();
-
-		white = white.copy(Config.ARGB_8888, true);
-		for (int i = 0; i < white.getWidth(); i++) {
-			for (int j = 0; j < white.getHeight(); j++) {
-				if (white.getPixel(i, j) == Color.WHITE) {
-					white.setPixel(i, j, Color.TRANSPARENT);
-				}
-			}
-		}
-		Mat m = new Mat(white.getWidth(), white.getHeight(), CvType.CV_8UC4);
-		Utils.bitmapToMat(white, m);
-		Imgproc.morphologyEx(m, m, Imgproc.MORPH_OPEN, new Mat());
-		Utils.matToBitmap(m, white);
-		frontView.setImageBitmap(white);
-		frontView.setDrawingCacheEnabled(false);
-		
+		new ClearEdges().execute();		
 	}
 	
 	/**
@@ -349,38 +343,7 @@ public class AutoMode extends Activity {
 	 * @param galleryBmp
 	 */
 	private void AutoApplyCanny(Bitmap galleryBmp) {
-
-		cannys = galleryBmp;
-		cannys = cannys.copy(Config.ARGB_8888, true);
-		cannys = applyCanny(cannys);
-
-		for (int i = 0; i < cannys.getWidth(); i++) {
-			for (int j = 0; j < cannys.getHeight(); j++) {
-				if (cannys.getPixel(i, j) == Color.BLACK) {
-					cannys.setHasAlpha(true);
-					cannys.setPixel(i, j, Color.TRANSPARENT);
-				}
-
-			}
-		}
-
-		frontView.setImageBitmap(cannys);
-		flood1 = cannys.copy(Config.ARGB_8888, true);
-
-		frontView.setOnTouchListener(new OnTouchListener() {
-
-			@Override
-			public boolean onTouch(View arg0, MotionEvent arg1) {
-				int x, y;
-				x = (int) arg1.getX();
-				y = (int) arg1.getY();
-
-				sendToFill(flood1, x, y);
-
-				return false;
-			}
-		});
-
+		new cannyTechnique().execute();		
 	}
 	
 	/**
@@ -456,6 +419,7 @@ public class AutoMode extends Activity {
 	 * @return Segmented Image
 	 */
 	private Bitmap applyCanny(Bitmap bmp) {
+			
 		Bitmap op = galleryBmp.copy(Config.ARGB_8888, true);
 		Size s = new Size(3, 3);
 		Mat canyMat = new Mat(op.getWidth(), op.getHeight(), CvType.CV_8UC4);
@@ -485,6 +449,7 @@ public class AutoMode extends Activity {
 		Imgproc.cvtColor(lapMat, lapMat, Imgproc.COLOR_GRAY2BGRA);
 		Utils.matToBitmap(lapMat, op);
 		bmp = op;
+		Toast.makeText(getBaseContext(), "oh Hey", 0).show();
 		
 		return bmp;
 	}
@@ -534,6 +499,8 @@ public class AutoMode extends Activity {
 		backView = (ImageView) findViewById(R.id.dImageView);
 		frontView = (ImageView) findViewById(R.id.dImageViewFront);
 		view = (RelativeLayout) findViewById(R.id.relativity);
+		currentProgress = new ProgressDialog( AutoMode.this );
+		currentProgress.setProgressStyle( ProgressDialog.STYLE_SPINNER );
 	}
 
 	/**
@@ -628,6 +595,7 @@ public class AutoMode extends Activity {
 	private void callTehCamIntent() {
 		Intent camInt = new Intent("android.media.action.IMAGE_CAPTURE");
 		startActivityForResult(camInt, CAMERA_REQUEST);
+
 	}
 
 	/**
@@ -639,5 +607,108 @@ public class AutoMode extends Activity {
 		galleryIntent.setType("image/*");
 		startActivityForResult(galleryIntent, GALLERY_REQUEST);
 
+	}
+	
+	/**
+	 * 
+	 * @author Farhan Khan
+	 * A sub Async class for applying canny
+	 * in the background, so screen wont hang again
+	 * also is a good practice to show that some background
+	 * Stuff is going on so user wont feel lag or irritate
+	 */
+	class cannyTechnique extends AsyncTask<Void, Void, Void>{
+
+		@Override
+		protected Void doInBackground(Void... arg0) {
+			cannys = galleryBmp;
+			cannys = cannys.copy(Config.ARGB_8888, true);
+			cannys = applyCanny(cannys);
+
+			for (int i = 0; i < cannys.getWidth(); i++) {
+				for (int j = 0; j < cannys.getHeight(); j++) {
+					if (cannys.getPixel(i, j) == Color.BLACK) {
+						cannys.setHasAlpha(true);
+						cannys.setPixel(i, j, Color.TRANSPARENT);
+					}
+
+				}
+			}
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(Void result) {
+			currentProgress.hide();
+			frontView.setImageBitmap(cannys);
+			flood1 = cannys.copy(Config.ARGB_8888, true);
+
+			frontView.setOnTouchListener(new OnTouchListener() {
+
+				@Override
+				public boolean onTouch(View arg0, MotionEvent arg1) {
+					int x, y;
+					x = (int) arg1.getX();
+					y = (int) arg1.getY();
+
+					sendToFill(flood1, x, y);
+
+					return false;
+				}
+			});
+
+		}
+
+		@Override
+		protected void onPreExecute() {
+			currentProgress.setTitle(" Applying Canny. Please Wait...");
+			currentProgress.setCancelable( false );
+			currentProgress.show();
+		}		
+	}
+	
+	/**
+	 * A sub class which will clear the edges on pressing
+	 * tapping the menu clear edges
+	 */
+	class ClearEdges extends AsyncTask<Void, Void, Void>{
+
+		@Override
+		protected Void doInBackground(Void... arg0) {
+			
+			white = white.copy(Config.ARGB_8888, true);
+			for (int i = 0; i < white.getWidth(); i++) {
+				for (int j = 0; j < white.getHeight(); j++) {
+					if (white.getPixel(i, j) == Color.WHITE) {
+						white.setPixel(i, j, Color.TRANSPARENT);
+					}
+				}
+			}
+			Mat m = new Mat(white.getWidth(), white.getHeight(), CvType.CV_8UC4);
+			Utils.bitmapToMat(white, m);
+			Imgproc.morphologyEx(m, m, Imgproc.MORPH_OPEN, new Mat());
+			Utils.matToBitmap(m, white);			
+			return null;
+		}
+
+		@Override
+		protected void onPostExecute(Void result) {
+			frontView.setImageBitmap(white);
+			frontView.setDrawingCacheEnabled(false);
+			currentProgress.hide();
+			Toast.makeText(getBaseContext(), "Edges Cleared!", Toast.LENGTH_SHORT).show();
+		}
+
+		@Override
+		protected void onPreExecute() {
+			frontView.setDrawingCacheEnabled(true);
+			white = frontView.getDrawingCache();
+			
+			currentProgress.setTitle(" Clearing Edges. Please Wait...");
+			currentProgress.setCancelable( false );
+			currentProgress.show();
+		}
+		
+		
 	}
 }
